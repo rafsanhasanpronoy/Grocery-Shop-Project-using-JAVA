@@ -2,11 +2,10 @@ package groceryshop;
 
 import java.security.GeneralSecurityException;
 import java.sql.*;
-import java.util.Scanner;
 
 public class UserManager {
 
-    private static final Scanner input = ConsoleInput.scanner();
+    private static final java.util.Scanner input = ConsoleInput.scanner();
 
     private static boolean isValidBangladeshiPhone(String phone) {
         return phone.matches("01[3-9]\\d{8}");
@@ -67,6 +66,8 @@ public class UserManager {
         System.out.print("Enter your PIN: ");
         String suppliedPin = input.nextLine().trim();
 
+        String name;
+        String storedPin;
         String query = "SELECT name, pin FROM users WHERE phone = ?";
         try (PreparedStatement stmt = DatabaseManager.getConnection().prepareStatement(query)) {
             stmt.setString(1, phone);
@@ -76,32 +77,36 @@ public class UserManager {
                     System.out.println("Invalid credentials.");
                     return;
                 }
-
-                String storedPin = rs.getString("pin");
-                boolean valid;
-                if (PinSecurity.isHashed(storedPin)) {
-                    valid = PinSecurity.verify(suppliedPin, storedPin);
-                } else {
-                    // Backward compatibility: verify an old plaintext PIN once, then upgrade it.
-                    valid = storedPin != null && storedPin.equals(suppliedPin);
-                    if (valid) {
-                        String upgradedHash = PinSecurity.hash(suppliedPin);
-                        try (PreparedStatement update = DatabaseManager.getConnection()
-                                .prepareStatement("UPDATE users SET pin = ? WHERE phone = ?")) {
-                            update.setString(1, upgradedHash);
-                            update.setString(2, phone);
-                            update.executeUpdate();
-                        }
-                    }
-                }
-
-                if (!valid) {
-                    System.out.println("Invalid credentials.");
-                    return;
-                }
-
-                System.out.println("Login successful! Welcome, " + rs.getString("name") + ".");
+                name = rs.getString("name");
+                storedPin = rs.getString("pin");
             }
+
+            boolean valid;
+            boolean upgradeLegacyPin = false;
+            if (PinSecurity.isHashed(storedPin)) {
+                valid = PinSecurity.verify(suppliedPin, storedPin);
+            } else {
+                // Backward compatibility: verify an old plaintext PIN once, then upgrade it.
+                valid = storedPin != null && storedPin.equals(suppliedPin);
+                upgradeLegacyPin = valid;
+            }
+
+            if (!valid) {
+                System.out.println("Invalid credentials.");
+                return;
+            }
+
+            if (upgradeLegacyPin) {
+                String upgradedHash = PinSecurity.hash(suppliedPin);
+                try (PreparedStatement update = DatabaseManager.getConnection()
+                        .prepareStatement("UPDATE users SET pin = ? WHERE phone = ?")) {
+                    update.setString(1, upgradedHash);
+                    update.setString(2, phone);
+                    update.executeUpdate();
+                }
+            }
+
+            System.out.println("Login successful! Welcome, " + name + ".");
             ProductManager.mainMenu(phone);
         } catch (SQLException | GeneralSecurityException e) {
             System.out.println("Login failed: " + e.getMessage());
