@@ -1,148 +1,123 @@
-# Grocery-Shop-Project-using-JAVA
+# Grocery Shop Project using Java
 
-The Grocery Shop project is a Java-based console application designed to manage a digital grocery store. It supports two categories of products: **Daily Grocery** and **Medicine**. The application integrates with a MySQL database for user management, product inventory, cart operations, and transactions.
-
----
+A Java console application for browsing daily groceries and medicines, maintaining a cart, and checking out against a MySQL inventory.
 
 ## Features
-### User Management
-- **Signup**: Register with a phone number, name, address, and PIN.
-- **Login**: Authenticate using phone number and PIN.
 
-### Product Management
-- **View Products**: Browse products by category (Daily Grocery or Medicine).
+- User signup and login with a Bangladeshi mobile number
+- Browse products by category
+- Add and view cart items
+- Checkout with transactional stock updates
+- PIN hashing and automatic upgrade of legacy plaintext PINs at successful login
 
-### Cart Operations
-- **Add to Cart**: Add products to the cart with stock validation.
-- **View Cart**: View items in the cart along with the total price.
-- **Checkout**: Deduct product stock and clear the cart after a successful transaction.
+## Repository structure
 
----
-
-## Project Structure
-```
-GroceryShop/
-├── src/
-│   ├── GroceryShop.java         # Main application class
-│   ├── DatabaseManager.java     # Handles database connection
-│   ├── UserManager.java         # Handles user signup and login
-│   ├── ProductManager.java      # Manages both daily grocery and medicine operations
-│   ├── CartManager.java         # Handles cart operations
-├── resources/
-│   ├── schema.sql               # SQL script to create and populate the database
-├── lib/
-│   ├── mysql-connector-java.jar # MySQL JDBC driver
-└── README.md                    # Project documentation
+```text
+groceryshop/
+  CartManager.java
+  ConsoleInput.java
+  DatabaseManager.java
+  GroceryShop.java
+  PinSecurity.java
+  ProductManager.java
+  UserManager.java
+database/
+  migration_secure_pin.sql
+README.md
 ```
 
----
+## Requirements
 
-## Prerequisites
-1. **Java JDK 8 or Higher**
-2. **MySQL Database**
-3. **MySQL JDBC Driver**
+- JDK 14 or newer (the source uses switch expressions introduced in Java 14)
+- MySQL
+- MySQL Connector/J available on the Java classpath
 
----
+## Database setup
 
-## Database Setup
-1. Create the database:
-   ```sql
-   CREATE DATABASE grocery_shop;
-   USE grocery_shop;
-   ```
+Create the database and tables if you have not already done so:
 
-2. Create the tables:
-   
-   CREATE TABLE users (
-       phone VARCHAR(15) PRIMARY KEY,
-       name VARCHAR(50) NOT NULL,
-       address VARCHAR(100) NOT NULL,
-       pin VARCHAR(10) NOT NULL
-   );
+```sql
+CREATE DATABASE grocery_shop;
+USE grocery_shop;
 
-   CREATE TABLE products (
-       id INT AUTO_INCREMENT PRIMARY KEY,
-       name VARCHAR(50) NOT NULL,
-       category ENUM('Daily Grocery', 'Medicine') NOT NULL,
-       price DECIMAL(10, 2) NOT NULL,
-       stock INT NOT NULL
-   );
+CREATE TABLE users (
+    phone VARCHAR(15) PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    address VARCHAR(100) NOT NULL,
+    pin VARCHAR(255) NOT NULL
+);
 
-   CREATE TABLE cart (
-       phone VARCHAR(15),
-       product_id INT,
-       category ENUM('Daily Grocery', 'Medicine') NOT NULL,
-       quantity INT NOT NULL,
-       PRIMARY KEY (phone, product_id, category),
-       FOREIGN KEY (phone) REFERENCES users(phone),
-       FOREIGN KEY (product_id) REFERENCES products(id)
-   );
-   
+CREATE TABLE products (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(50) NOT NULL,
+    category ENUM('Daily Grocery', 'Medicine') NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
+    stock INT NOT NULL,
+    CONSTRAINT chk_products_stock_nonnegative CHECK (stock >= 0)
+);
 
-3. Populate the products table:
-   
-   INSERT INTO products (name, category, price, stock) VALUES
-   ('Rice', 'Daily Grocery', 65.00, 100),
-   ('Potato', 'Daily Grocery', 25.00, 200),
-   ('Onion', 'Daily Grocery', 35.00, 150),
-   ('Sugar', 'Daily Grocery', 90.00, 50),
-   ('Paracetamol', 'Medicine', 1.00, 500),
-   ('Antibiotic', 'Medicine', 5.00, 300),
-   ('Vitamin C', 'Medicine', 2.00, 250);
-   
+CREATE TABLE cart (
+    phone VARCHAR(15) NOT NULL,
+    product_id INT NOT NULL,
+    category ENUM('Daily Grocery', 'Medicine') NOT NULL,
+    quantity INT NOT NULL,
+    PRIMARY KEY (phone, product_id, category),
+    CONSTRAINT chk_cart_quantity_positive CHECK (quantity > 0),
+    FOREIGN KEY (phone) REFERENCES users(phone),
+    FOREIGN KEY (product_id) REFERENCES products(id)
+);
+```
 
----
+Add sample products to the `products` table as needed. If you already have a database, do not recreate these tables.
 
-## How to Run
-1. **Clone the Repository**:
-   ```bash
-   git clone <repository-url>
-   cd GroceryShop
-   ```
+### Existing database: one-time PIN column migration
 
-2. **Add the MySQL Connector JAR**:
-   - Place the `mysql-connector-java.jar` file in the `lib/` directory.
-   - Ensure the classpath includes the JAR file.
+Before running the updated code against an existing database, run the script in `database/migration_secure_pin.sql` once. This widens `users.pin` to store salted PBKDF2 hashes. Existing plaintext PINs remain usable: on a successful login, the application upgrades that account's PIN to a hash. Encourage all users to log in after the update.
 
-3. **Compile the Code**:
-   ```bash
-   javac -cp .:lib/mysql-connector-java.jar src/*.java
-   ```
+## Database configuration
 
-4. **Run the Application**:
-   ```bash
-   java -cp .:lib/mysql-connector-java.jar src.GroceryShop
-   ```
+The app reads these environment variables, with local development defaults for URL and username:
 
----
+- `GROCERY_DB_URL` (default: `jdbc:mysql://localhost:3306/grocery_shop`)
+- `GROCERY_DB_USER` (default: `root`)
+- `GROCERY_DB_PASSWORD` (default: empty)
 
-## Usage
-1. Start the application.
-2. Register as a new user or log in.
-3. Browse products by category and add items to the cart.
-4. View the cart and proceed to checkout.
+For PowerShell, for example:
 
----
+```powershell
+$env:GROCERY_DB_URL = "jdbc:mysql://localhost:3306/grocery_shop"
+$env:GROCERY_DB_USER = "root"
+$env:GROCERY_DB_PASSWORD = "your-local-mysql-password"
+```
 
-## Validation Rules
-- **Phone Number Validation**:
-  - Must start with `01` and follow Bangladeshi SIM prefixes (`3-9`).
-  - Example: `01712345678`, `01987654321`.
+Do not commit real database credentials to Git.
 
-- **Stock Validation**:
-  - Ensures sufficient stock is available before adding items to the cart or checking out.
+## Compile and run
 
----
+From the repository root, assuming the MySQL Connector/J JAR is at `lib/mysql-connector-j.jar`:
 
-## Future Enhancements
-1. Add a graphical user interface (GUI) using JavaFX or Swing.
-2. Implement role-based access (e.g., admin for inventory management).
-3. Add support for online payment gateways.
+**Windows PowerShell**
+```powershell
+javac -cp ".;lib/mysql-connector-j.jar" groceryshop/*.java
+java -cp ".;lib/mysql-connector-j.jar" groceryshop.GroceryShop
+```
 
----
+**Linux/macOS**
+```bash
+javac -cp ".:lib/mysql-connector-j.jar" groceryshop/*.java
+java -cp ".:lib/mysql-connector-j.jar" groceryshop.GroceryShop
+```
 
-## Contributors
-- **Rafsan Hasan Pronoy** - Developer
+Adjust the JAR path to match the Connector/J file you downloaded.
 
----
+## Important behavior
 
+- Cart quantities must be positive and the requested total quantity cannot exceed current stock.
+- A product must belong to the category selected in the menu.
+- Checkout is transactional. If any item cannot be fulfilled, all stock changes are rolled back and the cart remains.
+- Prepared statements and try-with-resources are used for database operations.
+- Checkout protects against negative stock with a guarded SQL update and checks the affected-row count.
+
+## Limitations
+
+This is an educational console application, not a production e-commerce service. It uses one shared JDBC connection and does not yet include payment processing, order history, account recovery, or automated integration tests.
